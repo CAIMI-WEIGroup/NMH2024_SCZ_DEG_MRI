@@ -5,7 +5,7 @@ This repository contains scripts and data used in Cui et al., (2024).
 
 
 ## Scripts
-To perform DESeq2 analysis on differential gene expression in SCZ, run 
+To perform DESeq2 analysis on differential gene expression in SCZ, use 
 ```
 DESeq2analysis.R
 ```
