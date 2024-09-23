@@ -14,7 +14,7 @@ setwd("/Users/yongbin/projects/proj_deg_scz/")
 figurepath = "./figures/"
 
 # Load count data
-df = read_csv("./data/data_count.csv") 
+df = read_csv("./data/data_count.csv")
 
 # ================= QC ================= 
 # Check the distribution of count data
