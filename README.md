@@ -2,7 +2,9 @@
 This repository contains scripts and data used in Cui et al., (2024).
 
 ## Data
+DESeq2_deg_results_all.csv includes differentiated gene expression levels for all genes between SCZ and HC.
 
+data_all_lausanne120.mat includes tabulated imaging metrics in SCZ and HC.
 
 ## Scripts
 To perform DESeq2 analysis on differential gene expression in SCZ, use R script:
