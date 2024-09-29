@@ -1,12 +1,10 @@
 % Compute associations between gene expression and brain morphology
 clc, clear, close
-addpath(genpath('./myPLS/'));
-addpath(genpath('./gramm/'));
-addpath(genpath('./simpleBrainPlot'));
+addpath(genpath('./myPLS/')); % this is available at https://github.com/MIPLabCH/myPLS 
+addpath(genpath('./gramm/')); % this is available at https://github.com/piermorel/gramm
+addpath(genpath('./simpleBrainPlot')); % this is available at https://github.com/dutchconnectomelab/Simple-Brain-Plot
 
-selectIMG = 1; % 1: VOL, 2: SA, 3: CT
-isGrouping = 1;
-isRunPLS = 0;
+selectIMG = 1; % select image type: 1-> VOL, 2-> SA, 3-> CT
 
 % 1. Load data
 load('../data/data_all_lausanne120.mat');
@@ -17,73 +15,55 @@ group = mri.groupMRI;
 subjects = clin.id;
 
 % 2. PLS analysis
-if isRunPLS == 0
-    load(['../results/results_pls_gene_morph', num2str(selectIMG), '.mat']);
+X = dataGE;
+Y = dataMRI;
+C = dataCOV;
+G = group;
+    
+% exclude genes with more than 3 nans
+II_gene_incl = sum(double(X==0), 1) <= 3;
+X = X(:, II_gene_incl);
+    
+% exclude subjects if outliers of expression data
+II_subj_incl = ~isoutlier(sum(X, 2), 'quartiles');
+X = X(II_subj_incl, :);
+Y = Y(II_subj_incl, :);
+C = C(II_subj_incl, :);
+G = G(II_subj_incl, :);
+subjects = subjects(II_subj_incl);
+    
+% replace 0 by group median
+for ii = 1:size(X, 2)
+    tmp1 = X(G==0, ii);
+    tmp1(tmp1==0) = median(nonzeros(tmp1));
+    X(G==0, ii) = tmp1;
 
-    r = corr(res.X(res.grouping==1, :), res.Y(res.grouping==1, :));
-    writematrix(r, '../data/simulation/r_scz.txt', 'Delimiter', ',');
-    writematrix(res.X(res.grouping==1, :), '../data/simulation/X_scz.txt', 'Delimiter', ',');
-    writematrix(res.Y(res.grouping==1, :), '../data/simulation/Y_scz.txt', 'Delimiter', ',');
-
-    r = corr(res.X(res.grouping==0, :), res.Y(res.grouping==0, :));
-    writematrix(r, '../data/simulation/r_hc.txt', 'Delimiter', ',');
-
-else
-    X = dataGE;
-    Y = dataMRI;
-    C = dataCOV;
-    G = group;
-    
-    % exclude genes with more than 3 nans
-    II_gene_incl = sum(double(X==0), 1) <= 3;
-    X = X(:, II_gene_incl);
-    
-    % exclude subjects if outliers of expression data
-    II_subj_incl = ~isoutlier(sum(X, 2), 'quartiles');
-    X = X(II_subj_incl, :);
-    Y = Y(II_subj_incl, :);
-    C = C(II_subj_incl, :);
-    G = G(II_subj_incl, :);
-    subjects = subjects(II_subj_incl);
-    
-    % replace 0 by group median
-    for ii = 1:size(X, 2)
-        tmp1 = X(G==0, ii);
-        tmp1(tmp1==0) = median(nonzeros(tmp1));
-        X(G==0, ii) = tmp1;
-    
-        tmp1 = X(G==1, ii);
-        tmp1(tmp1==0) = median(nonzeros(tmp1));
-        X(G==1, ii) = tmp1;
-    end
-        
-    % regress out cov from X and Y
-    for ii = 1:size(X, 2)
-        tmp = regstats(X(:, ii), C, 'linear', {'r', 'tstat'});
-        X1(:, ii) = tmp.tstat.beta(1) + tmp.r;
-    end
-    for ii = 1:size(Y, 2)
-        tmp = regstats(Y(:, ii), C, 'linear', {'r', 'tstat'});
-        Y1(:, ii) = tmp.tstat.beta(1) + tmp.r;
-    end
-    
-    X1 = X1(randperm(size(X1, 1)), :);
-
-    % PLS correlation analysis
-    if isGrouping == 0
-        [input, pls_opts, save_opts] = y_pls_input(X1, Y1, G, ...
-            '../results/PLS/', 5000, 1000);
-    else
-        [input, pls_opts, save_opts] = y_pls_input_withGrouping(X1, Y1, G, ...
-            '../results/PLS/', 100, 100);
-    end
-    
-    [input, pls_opts, save_opts] = myPLS_initialize(input, pls_opts, save_opts);
-    res = myPLS_analysis(input, pls_opts);
-    % 
-    save(['../results/results_pls_gene_morph', num2str(selectIMG), '.mat'], ...
-        'res', 'subjects', 'X', 'Y', 'X1', 'Y1', 'C', 'G', 'II_gene_incl');
+    tmp1 = X(G==1, ii);
+    tmp1(tmp1==0) = median(nonzeros(tmp1));
+    X(G==1, ii) = tmp1;
 end
+        
+% regress out cov from X and Y
+for ii = 1:size(X, 2)
+    tmp = regstats(X(:, ii), C, 'linear', {'r', 'tstat'});
+    X1(:, ii) = tmp.tstat.beta(1) + tmp.r;
+end
+for ii = 1:size(Y, 2)
+    tmp = regstats(Y(:, ii), C, 'linear', {'r', 'tstat'});
+    Y1(:, ii) = tmp.tstat.beta(1) + tmp.r;
+end
+    
+X1 = X1(randperm(size(X1, 1)), :);
+
+% PLS correlation analysis
+[input, pls_opts, save_opts] = y_pls_input_withGrouping(X1, Y1, G, ...
+    '../results/PLS/', 5000, 5000);
+    
+[input, pls_opts, save_opts] = myPLS_initialize(input, pls_opts, save_opts);
+res = myPLS_analysis(input, pls_opts);
+ 
+save(['../results/results_pls_gene_morph', num2str(selectIMG), '.mat'], ...
+    'res', 'subjects', 'X', 'Y', 'X1', 'Y1', 'C', 'G', 'II_gene_incl');
 
 
 %% 3. Results: Is there any significant component?
@@ -117,7 +97,7 @@ g.set_text_options('font', 'sans-serif', 'legend_title_scaling', 1, ...
     'legend_scaling', 1);
 figure('Unit', 'centimeters', 'Position', [0 0 6.5 5]);
 g.draw();
-saveas(gcf, ['../figures/PLS_LX_LY_LC',num2str(II),'.svg']);
+
 
 % HC
 disp('within HC: Lx vs Ly');
@@ -149,7 +129,6 @@ nnz(X_pvaladj(:, II) < 0.05) ./ numel(X_pvaladj(:, II) < 0.05)
 nnz((X_pvaladj(:, II) < 0.05) & (X_salience(:, II) > 0))
 nnz((X_pvaladj(:, II) < 0.05) & (X_salience(:, II) < 0))
 
-
 % plot X salience
 clear g;    
 II = 1;
@@ -162,7 +141,7 @@ g.set_color_options('map',  [0.7,0.7,0.7;    0.1804    0.4824    0.7216],...
 g.no_legend();
 figure('Unit', 'centimeters', 'Position', [0 0 11 4.5]);
 g.draw();
-saveas(gcf, ['../figures/PLS_volume_gene_zval_', num2str(II),'.svg']);
+% saveas(gcf, ['../figures/PLS_volume_gene_zval_', num2str(II),'.svg']);
 
 
 %% 3.2 Contributions from Y: Z-score 
@@ -218,13 +197,6 @@ val = Y_zval((1+Nregion):end, II);
 plotBrain(regionDescriptions, val, flipud(cbrewer('div', 'RdBu', 1000)), ...;
     'limits', [-10,10], 'savePath',  ['../figures/PLS_SCZ_IMG_ALL_LC', num2str(II)]);
 
-save('../results/PLS_deg_morph_LCs.mat', 'Y_salience', 'X_salience', ...
-    "Y_loadings", "X_loadings", "Y_zval", "X_zval", "Y_pval", "Y_pvaladj", ...
-    "X_pvaladj", "X_pval", "res", "subjects", "II_gene_incl");
-
-table(regionDescriptions, Y_loadings((1+Nregion):end), Y_pvaladj((1+Nregion):end))
-
-
 
 %% plot scatter
 II = 1;
@@ -251,107 +223,4 @@ saveas(gcf, ['../figures/PLS_morph_Y_LY_LC',num2str(II),'_',region,'.svg']);
 X = res.Lx(:, II);
 Y = res.Y(:, III);
 [r,p] = corr(X(res.grouping == 1),Y(res.grouping == 1))
-return
 
-
-
-
-%% NOT REPORTED
-% nsdata = load('~/projects/project_gamba/data/neurosynth/results/result_make_neurosynth_QC_05092019.mat');
-nsdata = load('~/projects/project_gamba/data/neurosynth/results/result_brainmapfMRI_QC_05092019.mat');
-
-XX = Y_loadings(115:end, 1);
-
-for ii = 1:numel(nsdata.features)
-    [rr(ii,1), pp(ii,1)] = corr(squeeze(nsdata.regionFeatures(:,2,ii)), XX,...
-        'rows', 'complete');
-end
-[rrs, rid] = sort(rr,'descend');
-tt = table(rrs, pp(rid), mafdr(pp(rid), 'BHFDR', true), nsdata.features(rid));
-disp(head(tt));
-
-[~, J] = ismember('hallucination', tt.Var3)
-
-
-%% permut analysis
-isRunPermt = true;
-if isRunPermt
-    load(['../results/PLS/results_pls_morphology_null_', num2str(selectIMG), '.mat']);
-    LC_img_null_HC = [];    
-    LC_img_null_SZ = [];
-
-    for i = 1:numel(resnull)
-        tmpnull = resnull{i};
-        LC_img_null_HC(:, i) = tmpnull.LC_behav_loadings(1:114, 1);
-        LC_img_null_SZ(:, i) = tmpnull.LC_behav_loadings(115:end, 1);
-    end
-    
-    for i = 1:size(LC_img_null_HC, 1)
-        PP_HC(i, 1) = nnz(LC_img_null_HC(i, :) > res.LC_behav_loadings(i, 1)) ./ size(LC_img_null_HC, 2);
-        PP_SZ(i, 1) = nnz(LC_img_null_SZ(i, :) > res.LC_behav_loadings(i+114, 1)) ./ size(LC_img_null_HC, 2);
-    end
-    
-    plotBrain(regionDescriptions, PP_HC, cbrewer('seq', 'Reds', 1000));
-    plotBrain(regionDescriptions, PP_SZ, cbrewer('seq', 'Reds', 1000));
-end    
-
-
-%% PLS null-random gene
-isRunPermt = false;
-if isRunPermt
-    for i = 1:1000
-        IIgene_rand = IIgene(randperm(numel(IIgene)));
-        GE_rand = GE_all(:, IIgene_rand);
-        dataGErand = GE_rand(ia, :);
-
-        X = dataGErand;
-        Y = dataMRI;
-        C = cov;
-        G = group;
-
-        II_gene_incl = sum(double(X==0), 1) <= 3;
-        X = X(:, II_gene_incl);
-
-        II_subj_incl = ~isoutlier(sum(X, 2), 'quartiles');
-        X = X(II_subj_incl, :);
-        Y = Y(II_subj_incl, :);
-        C = C(II_subj_incl, :);
-        G = G(II_subj_incl, :);
-
-        % replace 0 by group median
-        for ii = 1:size(X, 2)
-            tmp1 = X(G==0, ii);
-            tmp1(tmp1==0) = median(nonzeros(tmp1));
-            X(G==0, ii) = tmp1;
-            tmp1 = X(G==1, ii);
-            tmp1(tmp1==0) = median(nonzeros(tmp1));
-            X(G==1, ii) = tmp1;
-        end
-
-        % Regress out cov from X and Y
-        X1 = [], Y1 = [];
-        for ii = 1:size(X, 2)
-            tmp = regstats(X(:, ii), C, 'linear', {'r', 'tstat'});
-            X1(:, ii) = tmp.tstat.beta(1) + tmp.r;
-        end
-        for ii = 1:size(Y, 2)
-            tmp = regstats(Y(:, ii), C, 'linear', {'r', 'tstat'});
-            Y1(:, ii) = tmp.tstat.beta(1) + tmp.r;
-        end
-
-        % PLS correlation analysis
-        if isGrouping == 0
-            [input, pls_opts, save_opts] = y_pls_input(X1, Y1, G, '../results/PLS/', 2, 2);
-        else
-            [input, pls_opts, save_opts] = y_pls_input_withGrouping(X1, Y1, G, '../results/PLS/', 2, 2);
-        end
-
-        [input, pls_opts, save_opts] = myPLS_initialize(input, pls_opts, save_opts);
-        resnull{i, 1} = myPLS_analysis(input, pls_opts);
-        resnull{i, 1}.boot_results = [];        
-    end
-    
-    save(['../results/PLS/results_pls_morphology_null_', num2str(selectIMG), '.mat'], 'resnull', '-v7.3');
-end
-
-return
