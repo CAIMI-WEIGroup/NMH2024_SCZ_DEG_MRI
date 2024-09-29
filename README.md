@@ -42,3 +42,6 @@ To perform PLS correlation analysis between gene expression, GMV, and cognitions
 ```
 scripts_assoc_clinical.m
 ```
+
+## if you use any data or script from this repository, please cite:
+Cui, LB., Zhao, SW., Zhang, YH. et al. Associated transcriptional, brain and clinical variations in schizophrenia. Nat. Mental Health (2024). https://doi.org/10.1038/s44220-024-00306-1
